@@ -18,6 +18,6 @@ archive.on('error', (err) => {
 })
 
 archive.pipe(output)
-archive.directory(join(__dirname, '..', 'dist'), false)
+archive.directory(join(__dirname, '..', 'dist'), 'dist')
 archive.file(join(__dirname, '..', 'package.json'), { name: 'package.json' })
 archive.finalize()

@@ -31,7 +31,7 @@
       "clipboard",
       "storage"
     ],
-    "entry": "index.html"
+    "entry": "dist/index.html"
   },
   "dependencies": {
     "@vueuse/core": "^14.1.0",
