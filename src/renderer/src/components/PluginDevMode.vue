@@ -69,14 +69,19 @@ const registerDevPlugin = async (): Promise<void> => {
 
 // 取消注册开发模式插件
 const unregisterDevPlugin = async (id: string): Promise<void> => {
+  // 乐观更新：立即从本地列表移除，给用户即时反馈
+  devPlugins.value = devPlugins.value.filter((p) => p.id !== id)
   try {
     const result = await window.api.plugin.dev.unregister(id)
     if (result.success) {
       toast.success(`已取消开发模式: ${id}`)
-      await loadDevPlugins()
+    } else {
+      toast.error('取消失败')
+      await loadDevPlugins() // 失败时回滚
     }
   } catch (error) {
     toast.error(`取消失败: ${error}`)
+    await loadDevPlugins() // 异常时回滚
   }
 }
 
@@ -180,10 +185,10 @@ onMounted(() => {
                 <Button
                   variant="ghost"
                   size="sm"
-                  class="ml-2"
+                  class="ml-2 text-destructive hover:text-destructive"
                   @click="unregisterDevPlugin(plugin.id)"
                 >
-                  取消
+                  移除
                 </Button>
               </div>
             </div>
