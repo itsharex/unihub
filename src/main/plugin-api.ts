@@ -46,20 +46,16 @@ export class PluginAPI {
         ? "$ws = New-Object -ComObject WScript.Shell; Start-Sleep -Milliseconds 80; $ws.SendKeys('%{TAB}'); Start-Sleep -Milliseconds 120; $ws.SendKeys('^v')"
         : "$ws = New-Object -ComObject WScript.Shell; Start-Sleep -Milliseconds 80; $ws.SendKeys('^v')"
 
-      await this.runSystemCommand('powershell', [
-        '-NoProfile',
-        '-Command',
-        command
-      ])
+      await this.runSystemCommand('powershell', ['-NoProfile', '-Command', command])
       return
     }
 
     if (process.platform === 'darwin') {
       const script = switchToLastWindow
-        ? 'tell application \"System Events\" to keystroke tab using {command down}\n' +
+        ? 'tell application "System Events" to keystroke tab using {command down}\n' +
           'delay 0.15\n' +
-          'tell application \"System Events\" to keystroke \"v\" using {command down}'
-        : 'tell application \"System Events\" to keystroke \"v\" using {command down}'
+          'tell application "System Events" to keystroke "v" using {command down}'
+        : 'tell application "System Events" to keystroke "v" using {command down}'
 
       await this.runSystemCommand('osascript', ['-e', script])
       return
@@ -284,7 +280,7 @@ export class PluginAPI {
           const window = BrowserWindow.fromWebContents(event.sender)
           // 通过 URL 参数判断悬浮窗，默认不隐藏
           const isFloating = event.sender.getURL().includes('floating=1')
-          const hideWindow = isFloating ? false : options.hideWindow ?? true
+          const hideWindow = isFloating ? false : (options.hideWindow ?? true)
           if (window && !window.isDestroyed()) {
             if (hideWindow) {
               window.hide()
