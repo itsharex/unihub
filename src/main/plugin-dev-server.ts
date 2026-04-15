@@ -49,6 +49,13 @@ export class PluginDevServer {
       ...config
     }))
   }
+
+  /**
+   * 获取开发模式插件的配置
+   */
+  getDevConfig(pluginId: string): { url: string; autoReload: boolean } | null {
+    return this.devPlugins.get(pluginId) ?? null
+  }
 }
 
 export const pluginDevServer = new PluginDevServer()

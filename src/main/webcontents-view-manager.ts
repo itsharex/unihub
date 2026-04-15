@@ -1,6 +1,7 @@
 import { BrowserWindow, WebContentsView, ipcMain } from 'electron'
 import { join } from 'path'
 import { createLogger } from '../shared/logger'
+import { pluginDevServer } from './plugin-dev-server'
 
 const logger = createLogger('webcontents-view-manager')
 
@@ -18,6 +19,7 @@ export class WebContentsViewManager {
   private hiddenBySearch: string | null = null // 被搜索窗口临时隐藏的插件 ID
   private lastBounds = new Map<string, { x: number; y: number; width: number; height: number }>() // 缓存最后的 bounds，避免重复设置
   private sidebarCollapsed = false // 侧边栏是否收起
+  private reloadTimers = new Map<string, ReturnType<typeof setTimeout>>() // autoReload 重试计时器
 
   /**
    * 设置主窗口
@@ -94,7 +96,7 @@ export class WebContentsViewManager {
         (function() {
           const params = new URLSearchParams(window.location.search);
           const pluginId = params.get('__plugin_id') || '${pluginId}';
-          
+
           Object.defineProperty(window, '__UNIHUB_PLUGIN_ID__', {
             value: pluginId,
             writable: false,
@@ -127,23 +129,38 @@ export class WebContentsViewManager {
     //   view.webContents.openDevTools({ mode: 'detach' })
     // }
 
-    // 监听控制台消息（仅开发模式）
-    if (process.env.NODE_ENV === 'development') {
+    // 监听控制台消息
+    // 开发模式插件：直接输出到 stdout（方便开发者调试）
+    // 其他：仅在 development 环境下通过 logger 记录
+    const devConfig = pluginDevServer.getDevConfig(pluginId)
+    if (devConfig) {
+      const levelMap = ['debug', 'info', 'warn', 'error'] as const
+      view.webContents.on('console-message', (_event, level, message, line, sourceId) => {
+        const tag = `\x1b[36m[Plugin:${pluginId}]\x1b[0m`
+        const lvl = levelMap[level] || 'log'
+        const src = sourceId ? ` (${sourceId}:${line})` : ''
+        process.stdout.write(`${tag} [${lvl}] ${message}${src}\n`)
+      })
+    } else if (process.env.NODE_ENV === 'development') {
       view.webContents.on('console-message', (_event, _level, message) => {
         logger.info({ pluginId, message }, '[Plugin]')
       })
     }
 
-    // 监听加载错误（只记录主框架的严重错误）
+    // 监听加载错误
     view.webContents.on(
       'did-fail-load',
       (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
-        // 忽略非主框架的加载错误
-        // 忽略 ERR_ABORTED (-3) 和 ERR_FAILED (-2)，这些通常是非致命的
         if (!isMainFrame || errorCode === -3 || errorCode === -2) {
           return
         }
         logger.error({ pluginId, errorCode, errorDescription, validatedURL }, '[Plugin] 加载失败')
+
+        // autoReload: dev 模式下自动重试
+        if (devConfig?.autoReload) {
+          logger.info({ pluginId }, '[Dev] 开发服务器连接失败，2s 后自动重试...')
+          this.scheduleDevReload(pluginId, view)
+        }
       }
     )
 
@@ -279,6 +296,13 @@ export class WebContentsViewManager {
     }
 
     this.views.delete(pluginId)
+
+    // 清理 autoReload 计时器
+    const timer = this.reloadTimers.get(pluginId)
+    if (timer) {
+      clearTimeout(timer)
+      this.reloadTimers.delete(pluginId)
+    }
 
     // 从 LRU 队列中移除
     const index = this.lruQueue.indexOf(pluginId)
@@ -439,6 +463,36 @@ export class WebContentsViewManager {
         logger.info({ pluginId, theme }, '已通知插件主题变化')
       }
     }
+  }
+
+  /**
+   * 调度 dev 模式自动重载（延迟重试）
+   */
+  private scheduleDevReload(pluginId: string, view: WebContentsView): void {
+    // 清除已有的计时器
+    const existing = this.reloadTimers.get(pluginId)
+    if (existing) clearTimeout(existing)
+
+    const timer = setTimeout(() => {
+      this.reloadTimers.delete(pluginId)
+      if (!view.webContents.isDestroyed()) {
+        logger.info({ pluginId }, '[Dev] 尝试重新加载...')
+        view.webContents.reloadIgnoringCache()
+      }
+    }, 2000)
+
+    this.reloadTimers.set(pluginId, timer)
+  }
+
+  /**
+   * 手动重载开发模式插件视图
+   */
+  reloadPluginView(pluginId: string): boolean {
+    const view = this.views.get(pluginId)
+    if (!view || view.webContents.isDestroyed()) return false
+    view.webContents.reloadIgnoringCache()
+    logger.info({ pluginId }, '手动重载插件视图')
+    return true
   }
 
   /**

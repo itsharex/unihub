@@ -28,7 +28,8 @@ const api = {
         ipcRenderer.invoke('plugin:dev:register', pluginId, devUrl, autoReload),
       unregister: (pluginId: string) => ipcRenderer.invoke('plugin:dev:unregister', pluginId),
       isDevMode: (pluginId: string) => ipcRenderer.invoke('plugin:dev:isDevMode', pluginId),
-      list: () => ipcRenderer.invoke('plugin:dev:list')
+      list: () => ipcRenderer.invoke('plugin:dev:list'),
+      reload: (pluginId: string) => ipcRenderer.invoke('plugin:dev:reload', pluginId)
     }
   },
   // 文件系统 API

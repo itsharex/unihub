@@ -85,6 +85,22 @@ const unregisterDevPlugin = async (id: string): Promise<void> => {
   }
 }
 
+// 刷新开发模式插件（reloadIgnoringCache）
+const reloadDevPlugin = async (id: string): Promise<void> => {
+  try {
+    const result = await window.api.plugin.dev.reload(id)
+    if (result.success) {
+      toast.success(`已刷新: ${id}`)
+    } else {
+      // 视图不存在时尝试重新打开
+      await window.api.plugin.open(id)
+      toast.success(`已重新打开: ${id}`)
+    }
+  } catch (error) {
+    toast.error(`刷新失败: ${error}`)
+  }
+}
+
 onMounted(() => {
   loadDevPlugins()
 })
@@ -182,14 +198,19 @@ onMounted(() => {
                     {{ plugin.url }}
                   </p>
                 </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  class="ml-2 text-destructive hover:text-destructive"
-                  @click="unregisterDevPlugin(plugin.id)"
-                >
-                  移除
-                </Button>
+                <div class="flex items-center gap-1 ml-2">
+                  <Button variant="ghost" size="sm" @click="reloadDevPlugin(plugin.id)">
+                    刷新
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    class="text-destructive hover:text-destructive"
+                    @click="unregisterDevPlugin(plugin.id)"
+                  >
+                    移除
+                  </Button>
+                </div>
               </div>
             </div>
           </div>
@@ -202,7 +223,7 @@ onMounted(() => {
             <ol class="space-y-3 text-sm text-gray-700 dark:text-gray-300">
               <li class="flex gap-3">
                 <span
-                  class="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-full bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-300 text-xs font-semibold"
+                  class="shrink-0 w-6 h-6 flex items-center justify-center rounded-full bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-300 text-xs font-semibold"
                 >
                   1
                 </span>
@@ -221,7 +242,7 @@ onMounted(() => {
 
               <li class="flex gap-3">
                 <span
-                  class="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-full bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-300 text-xs font-semibold"
+                  class="shrink-0 w-6 h-6 flex items-center justify-center rounded-full bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-300 text-xs font-semibold"
                 >
                   2
                 </span>
@@ -235,7 +256,7 @@ onMounted(() => {
 
               <li class="flex gap-3">
                 <span
-                  class="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-full bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-300 text-xs font-semibold"
+                  class="shrink-0 w-6 h-6 flex items-center justify-center rounded-full bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-300 text-xs font-semibold"
                 >
                   3
                 </span>
@@ -249,7 +270,7 @@ onMounted(() => {
 
               <li class="flex gap-3">
                 <span
-                  class="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-full bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-300 text-xs font-semibold"
+                  class="shrink-0 w-6 h-6 flex items-center justify-center rounded-full bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-300 text-xs font-semibold"
                 >
                   4
                 </span>

@@ -18,6 +18,7 @@ import { PluginAPI } from './plugin-api'
 import { NodeAPI } from './node-api'
 import { registerDevModeHandlers } from './ipc-handlers'
 import { webContentsViewManager } from './webcontents-view-manager'
+import { pluginDevServer } from './plugin-dev-server'
 import { shortcutManager } from './shortcut-manager'
 import { settingsManager } from './settings-manager'
 import type { AppSettings } from './settings-manager'
@@ -443,7 +444,32 @@ function setupIpcHandlers(): void {
   })
 
   ipcMain.handle('plugin:list', async () => {
-    return await pluginManager.listPlugins()
+    const installed = await pluginManager.listPlugins()
+    // 合入 dev 模式注册但未安装的插件
+    const devPlugins = pluginDevServer.getAllDevPlugins()
+    const installedIds = new Set(installed.map((p) => p.id))
+    for (const dp of devPlugins) {
+      if (!installedIds.has(dp.id)) {
+        installed.push({
+          id: dp.id,
+          version: 'dev',
+          enabled: true,
+          installedAt: new Date().toISOString(),
+          source: 'dev',
+          metadata: {
+            id: dp.id,
+            name: dp.id.split('.').pop() || dp.id,
+            version: 'dev',
+            description: `开发模式 — ${dp.url}`,
+            author: '',
+            entry: 'dist/index.html',
+            category: 'dev',
+            permissions: []
+          }
+        })
+      }
+    }
+    return installed
   })
 
   // 检查插件更新
@@ -480,19 +506,21 @@ function setupIpcHandlers(): void {
       return result
     }
 
-    const plugins = await pluginManager.listPlugins()
-    const plugin = plugins.find((p) => p.id === pluginId)
-    if (!plugin) {
-      return { success: false, message: '插件未找到' }
-    }
-
     let pluginUrl = ''
     if (result.devUrl) {
+      // dev 模式：直接使用 devUrl，不需要检查安装状态
       pluginUrl = result.devUrl
-    } else if (result.htmlPath) {
-      pluginUrl = `plugin://${pluginId}/dist/index.html`
     } else {
-      return { success: false, message: '插件 URL 不正确' }
+      const plugins = await pluginManager.listPlugins()
+      const plugin = plugins.find((p) => p.id === pluginId)
+      if (!plugin) {
+        return { success: false, message: '插件未找到' }
+      }
+      if (result.htmlPath) {
+        pluginUrl = `plugin://${pluginId}/dist/index.html`
+      } else {
+        return { success: false, message: '插件 URL 不正确' }
+      }
     }
 
     // 检查视图是否已存在，不存在才创建
@@ -514,6 +542,12 @@ function setupIpcHandlers(): void {
   ipcMain.handle('plugin:destroy', async (_, pluginId: string) => {
     webContentsViewManager.removePluginView(pluginId)
     return { success: true }
+  })
+
+  // 开发模式：重新加载插件视图
+  ipcMain.handle('plugin:dev:reload', async (_, pluginId: string) => {
+    const ok = webContentsViewManager.reloadPluginView(pluginId)
+    return { success: ok, message: ok ? undefined : '视图不存在或已销毁' }
   })
 
   ipcMain.handle(

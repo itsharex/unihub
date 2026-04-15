@@ -111,6 +111,7 @@ declare global {
           list: () => Promise<
             ApiResponse<Array<{ pluginId: string; devUrl: string; autoReload: boolean }>>
           >
+          reload: (pluginId: string) => Promise<ApiResponse>
         }
       }
       fs: {
