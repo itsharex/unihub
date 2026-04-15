@@ -348,13 +348,14 @@ export class PluginAPI {
           }
         } else {
           // macOS / Linux
-          const { stdout } = await exec('lsof -iTCP -iUDP -n -P -sTCP:LISTEN')
+          const { stdout } = await exec('lsof +c 0 -iTCP -iUDP -n -P -sTCP:LISTEN')
           for (const line of stdout.split('\n')) {
             if (!line || line.startsWith('COMMAND')) continue
             // 格式: "node  12345 user  22u  IPv4  ... TCP *:3000 (LISTEN)"
             const parts = line.trim().split(/\s+/)
             if (parts.length < 9) continue
-            const name = parts[0] || ''
+            // lsof 部分版本对带空格的进程名用 \x20 转义，还原回来
+            const name = (parts[0] || '').replace(/\\x20/g, ' ')
             const pid = parseInt(parts[1] || '', 10)
             if (isNaN(pid)) continue
             const proto = (parts[7] || '').toUpperCase().includes('UDP') ? 'UDP' : 'TCP'
