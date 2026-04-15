@@ -69,7 +69,9 @@ const api = {
     showInFolder: (path: string) => ipcRenderer.invoke('plugin-api:system:showInFolder', path),
     paste: () => ipcRenderer.invoke('plugin-api:system:paste'),
     quickPaste: (options?: { delayMs?: number; hideWindow?: boolean }) =>
-      ipcRenderer.invoke('plugin-api:system:quickPaste', options)
+      ipcRenderer.invoke('plugin-api:system:quickPaste', options),
+    getPorts: () => ipcRenderer.invoke('plugin-api:system:getPorts'),
+    killProcess: (pid: number) => ipcRenderer.invoke('plugin-api:system:killProcess', pid)
   },
   // HTTP API
   http: {
@@ -323,6 +325,24 @@ const unihubAPI = {
     quickPaste: async (options?: { delayMs?: number; hideWindow?: boolean }) => {
       const result = await ipcRenderer.invoke('plugin-api:system:quickPaste', options)
       if (!result.success) throw new Error(result.error || '系统快速粘贴失败')
+    },
+    // 获取端口占用列表
+    getPorts: async () => {
+      const result = await ipcRenderer.invoke('plugin-api:system:getPorts')
+      if (!result.success) throw new Error(result.error || '获取端口列表失败')
+      return result.data as Array<{
+        pid: number
+        name: string
+        port: number
+        protocol: 'TCP' | 'UDP'
+        state: string
+        address: string
+      }>
+    },
+    // 关闭指定 PID 的进程
+    killProcess: async (pid: number) => {
+      const result = await ipcRenderer.invoke('plugin-api:system:killProcess', pid)
+      if (!result.success) throw new Error(result.error || '关闭进程失败')
     }
   },
   // 通知 API

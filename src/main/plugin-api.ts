@@ -1,11 +1,23 @@
 import { ipcMain, dialog, clipboard, shell, nativeImage, BrowserWindow } from 'electron'
-import { spawn } from 'child_process'
+import { spawn, exec as execCallback } from 'child_process'
+import { promisify } from 'util'
 import { readFile, writeFile, readdir, stat, mkdir } from 'fs/promises'
 import { existsSync } from 'fs'
 import { app } from 'electron'
 import { permissionManager } from './permission-manager'
 import { clipboardMonitor } from './clipboard-monitor'
 import { lmdbManager } from './lmdb-manager'
+
+const exec = promisify(execCallback)
+
+export interface PortInfo {
+  pid: number
+  name: string
+  port: number
+  protocol: 'TCP' | 'UDP'
+  state: string
+  address: string
+}
 
 /**
  * 插件 API 处理器
@@ -299,6 +311,99 @@ export class PluginAPI {
         }
       }
     )
+
+    // 端口占用查询 API
+    ipcMain.handle('plugin-api:system:getPorts', async (event) => {
+      try {
+        const pluginId = this.getPluginIdFromEvent(event)
+        permissionManager.requirePermission(pluginId, 'system')
+
+        const ports: PortInfo[] = []
+
+        if (process.platform === 'win32') {
+          const { stdout } = await exec('netstat -ano')
+          for (const line of stdout.split('\n')) {
+            const parts = line.trim().split(/\s+/)
+            if (parts.length < 5) continue
+            // 格式: "  TCP  0.0.0.0:80  0.0.0.0:0  LISTENING  1234"
+            const proto = parts[0]?.toUpperCase()
+            if (proto !== 'TCP' && proto !== 'UDP') continue
+            const localAddr = parts[1] || ''
+            const state = proto === 'TCP' ? parts[3] || '' : ''
+            const pidStr = proto === 'TCP' ? parts[4] : parts[3]
+            const pid = parseInt(pidStr || '', 10)
+            if (isNaN(pid)) continue
+            const lastColon = localAddr.lastIndexOf(':')
+            const portNum = parseInt(localAddr.slice(lastColon + 1), 10)
+            const address = localAddr.slice(0, lastColon)
+            if (isNaN(portNum)) continue
+            ports.push({
+              pid,
+              name: String(pid),
+              port: portNum,
+              protocol: proto as 'TCP' | 'UDP',
+              state,
+              address
+            })
+          }
+        } else {
+          // macOS / Linux
+          const { stdout } = await exec('lsof -iTCP -iUDP -n -P -sTCP:LISTEN')
+          for (const line of stdout.split('\n')) {
+            if (!line || line.startsWith('COMMAND')) continue
+            // 格式: "node  12345 user  22u  IPv4  ... TCP *:3000 (LISTEN)"
+            const parts = line.trim().split(/\s+/)
+            if (parts.length < 9) continue
+            const name = parts[0] || ''
+            const pid = parseInt(parts[1] || '', 10)
+            if (isNaN(pid)) continue
+            const proto = (parts[7] || '').toUpperCase().includes('UDP') ? 'UDP' : 'TCP'
+            const addrPart = parts[8] || ''
+            const lastColon = addrPart.lastIndexOf(':')
+            if (lastColon === -1) continue
+            const portNum = parseInt(addrPart.slice(lastColon + 1), 10)
+            const address = addrPart.slice(0, lastColon)
+            if (isNaN(portNum)) continue
+            const stateMatch = line.match(/\((\w+)\)/)
+            const state = stateMatch ? stateMatch[1] : ''
+            ports.push({
+              pid,
+              name,
+              port: portNum,
+              protocol: proto as 'TCP' | 'UDP',
+              state,
+              address
+            })
+          }
+        }
+
+        return { success: true, data: ports }
+      } catch (error: unknown) {
+        return { success: false, error: (error as Error).message }
+      }
+    })
+
+    // 关闭进程 API
+    ipcMain.handle('plugin-api:system:killProcess', async (event, pid: number) => {
+      try {
+        const pluginId = this.getPluginIdFromEvent(event)
+        permissionManager.requirePermission(pluginId, 'system')
+
+        if (typeof pid !== 'number' || !Number.isInteger(pid) || pid <= 0) {
+          throw new Error('无效的 PID')
+        }
+
+        if (process.platform === 'win32') {
+          await exec(`taskkill /PID ${pid} /F`)
+        } else {
+          process.kill(pid, 'SIGTERM')
+        }
+
+        return { success: true }
+      } catch (error: unknown) {
+        return { success: false, error: (error as Error).message }
+      }
+    })
 
     // HTTP API（避免 CORS）
     ipcMain.handle('plugin-api:http:request', async (event, options: Record<string, unknown>) => {
